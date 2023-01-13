@@ -6,7 +6,7 @@ Preprocessing data:
 - Removing punctuations
 - lemmatizing
 - normalizing
-- tokenizing
+- tokenizing    
 Building inverted index
 Building champions list
 
