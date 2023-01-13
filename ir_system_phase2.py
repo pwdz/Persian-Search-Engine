@@ -2,12 +2,14 @@ from __future__ import unicode_literals
 from cmath import log10, sqrt
 import os
 import sys
+from configs import *
 from hazm import *
 import json
 from parsivar import FindStems
-from configs import Stop_words, Punctuations, Writing_marks
+# from configs import Stop_words, Punctuations, Writing_marks
 import tqdm
-
+from heapq import heappop, heappush, heapify
+ 
 IR_DATA_PATH = "./IR_data_news_12k.json" 
 INDEX_FILE_PATH = "./inverted_index.json" 
 CHAMPIONS_FILE_PATH = "./champions_list.json" 
@@ -138,27 +140,26 @@ def calculate_score(scores, doc_id, q_term, q_vector):
     W_q = calculate_tfidf(query_tf, df, N)
             
     scores[doc_id] += W_q * W_td
+    return W_td
         
-def calculate_length(lengths, doc_id, q_term):
-    if doc_id not in lengths:
-        lengths[doc_id] = 0    
-    lengths[doc_id] += inverted_index[q_term]['doc_tf'][doc_id]**2
+def calculate_length(lengths, doc_id, w_td):
+    lengths[doc_id] += w_td**2
         
     
 def calculate_similarity(query_tokens, goal_docs, q_vector):
     scores = {}
     lengths = {}
     for q_term in query_tokens:
-        if len(goal_docs) < len(inverted_index[q_term]['doc_tf']):
-            for doc_id in goal_docs:
-                if doc_id in inverted_index[q_term]['doc_tf']:
-                    calculate_score(scores, doc_id, q_term, q_vector)
-                    calculate_length(lengths, doc_id, q_term)
-        else:
-            for doc_id in inverted_index[q_term]['doc_tf']:
-                if doc_id in goal_docs:
-                    calculate_score(scores, doc_id, q_term, q_vector)
-                    calculate_length(lengths, doc_id, q_term)
+        for doc_id in goal_docs:
+            if doc_id not in scores:
+                scores[doc_id] = 0
+            if doc_id not in lengths:
+                lengths[doc_id] = 0
+
+            if doc_id in inverted_index[q_term]['doc_tf']:
+                w_td = calculate_score(scores, doc_id, q_term, q_vector)
+                calculate_length(lengths, doc_id, w_td)
+
     for doc_id in scores:
         scores[doc_id] /= sqrt(lengths[doc_id])
     return scores
@@ -173,7 +174,6 @@ def search_query(query):
     goal_docs = set()
     for q_term in query_tokens:
         goal_docs |= set(doc_id for doc_id in champions_list[q_term])
-    # print(goal_docs)
 
     scores = calculate_similarity(query_tokens, goal_docs, vector)
     return scores
@@ -183,16 +183,19 @@ def show_results(scores, top_k):
     pass
     print("\n[[[[[[[Results]]]]]]]:")
     print(f"Total found results: {len(scores)}")
-    scores = dict(sorted(scores.items(), reverse=True, key=lambda item: abs(item[1])))
-    i = 0
-    for doc_id in scores:
-        i+=1
-        print('=============================================')
-        # print(f"{i}) [doc_id: {doc_id}], [Title: {news_data[doc_id]['title']}]")
-        print(f"[doc_id: {doc_id}], [Score: {scores[doc_id].real}], [Title: {news_data[doc_id]['title']}]")
-        print("[Link:", news_data[doc_id]['url'],"]")
-        if i >= top_k:
+    heap = []
+    heapify(heap)   
+    for key in scores:
+        heappush(heap, (-1 * scores[key].real, key))
+    
+    for i in range(top_k):
+        if i >= len(scores):
             break
+        print('=============================================')
+        score, doc_id = heappop(heap)
+        score *= -1
+        print(f"{i+1}) [doc_id: {doc_id}], [Score: {score.real}], [Title: {news_data[doc_id]['title']}]")
+        print("[Link:", news_data[doc_id]['url'],"]")
     
                      
 if __name__ == "__main__":
@@ -210,4 +213,4 @@ if __name__ == "__main__":
     query = input()
    
     scores = search_query(query)
-    show_results(scores, 10)
+    show_results(scores, 20)
